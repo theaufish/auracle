@@ -1,0 +1,16 @@
+auracle is starting with model {{ .Values.ollama.model }} at {{ .Values.ollama.url }}.
+
+Check that it connected to Discord:
+
+  kubectl logs -n {{ .Release.Namespace }} deploy/{{ include "auracle.fullname" . }}
+
+{{- if include "auracle.docsClaim" . }}
+
+The bot answers from the files in PersistentVolumeClaim "{{ include "auracle.docsClaim" . }}"{{ with .Values.docs.subPath }} (under {{ . }}){{ end }}.
+See the chart's README for how to copy files into it. The bot picks up new files
+without restarting.
+{{- else }}
+
+WARNING: no docs volume is configured (docs.existingClaim is empty and
+docs.persistence.enabled is false), so the bot has no files to answer from.
+{{- end }}

@@ -1,0 +1,20 @@
+{{- if and .Values.docs.persistence.enabled (not .Values.docs.existingClaim) }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "auracle.docsClaim" . }}
+  labels:
+    {{- include "auracle.labels" . | nindent 4 }}
+  annotations:
+    # Keep the docs if the release is uninstalled.
+    helm.sh/resource-policy: keep
+spec:
+  accessModes:
+    {{- toYaml .Values.docs.persistence.accessModes | nindent 4 }}
+  {{- with .Values.docs.persistence.storageClass }}
+  storageClassName: {{ . }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.docs.persistence.size }}
+{{- end }}

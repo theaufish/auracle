@@ -1,0 +1,6 @@
+apiVersion: v2
+name: auracle
+description: A Discord bot that answers questions from a directory of files using Ollama.
+type: application
+version: 0.1.0
+appVersion: "0.1.0"

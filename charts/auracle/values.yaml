@@ -1,0 +1,63 @@
+image:
+  repository: ghcr.io/aufishgamelabs/auracle
+  # Defaults to the chart's appVersion.
+  tag: ""
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+
+discord:
+  # Name of an existing Secret holding the Discord bot token. Required.
+  # Create it with:
+  #   kubectl create secret generic auracle-discord --from-literal=token=YOUR_TOKEN
+  existingSecret: ""
+  # Key within the Secret that holds the token.
+  tokenKey: token
+
+ollama:
+  # URL of the Ollama server, reachable from inside the cluster.
+  url: http://ollama:11434
+  # Model to use. Must support tool calling.
+  model: gpt-oss:120b
+
+# Files the bot answers from, mounted read-only at /docs.
+docs:
+  # Use an existing PersistentVolumeClaim. Takes precedence over persistence.
+  existingClaim: ""
+  # Optional path within the volume to use as the docs directory.
+  subPath: ""
+  # Otherwise, create a PersistentVolumeClaim for the docs.
+  persistence:
+    enabled: true
+    # Empty uses the cluster's default StorageClass.
+    storageClass: ""
+    accessModes:
+      - ReadWriteOnce
+    size: 1Gi
+
+# Optional extra instructions appended to the bot's built-in ones.
+systemPrompt: ""
+# Messages of conversation history kept per channel or whispering user.
+maxHistory: 20
+
+log:
+  # debug, info, warn or error. debug includes the text of questions and answers.
+  level: info
+  # text or json.
+  format: text
+
+# Extra environment variables for the bot container.
+extraEnv: []
+
+resources:
+  requests:
+    cpu: 10m
+    memory: 32Mi
+  limits:
+    memory: 256Mi
+
+podAnnotations: {}
+podLabels: {}
+nodeSelector: {}
+tolerations: []
+affinity: {}
