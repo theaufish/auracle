@@ -26,6 +26,8 @@ app.kubernetes.io/managed-by: {{ .Release.Service }}
 {{- define "auracle.docsClaim" -}}
 {{- if .Values.docs.existingClaim }}
 {{- .Values.docs.existingClaim }}
+{{- else if .Values.docs.hostPath.path }}
+{{- printf "%s-docs-host" (include "auracle.fullname" .) }}
 {{- else if .Values.docs.persistence.enabled }}
 {{- printf "%s-docs" (include "auracle.fullname" .) }}
 {{- end }}

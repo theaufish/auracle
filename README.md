@@ -145,7 +145,30 @@ A Helm chart in [`charts/auracle`](charts/auracle/README.md) runs a single insta
 docker build -t auracle .
 ```
 
-See the [chart README](charts/auracle/README.md) for building the image, creating the Secret, installing and loading the docs.
+The `Makefile` wraps the whole deploy:
+
+```sh
+DISCORD_TOKEN=... make secret        # once: store the token in a Kubernetes Secret
+make helm OLLAMA_URL=http://ollama.ollama.svc:11434
+```
+
+`make helm` builds the image for `linux/amd64` and `linux/arm64`, pushes it, and runs `helm upgrade --install`, so the same command installs the bot the first time and updates it afterwards. The image tag is a hash of the Go sources, so the pod is only replaced when the code changed. It deploys to the `auracle` namespace, using your current `kubectl` context.
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `IMAGE` | `ghcr.io/aufishgamelabs/auracle` | Image repository to push to. |
+| `TAG` | hash of the sources | Image tag. |
+| `PLATFORMS` | `linux/amd64,linux/arm64` | Platforms to build for. |
+| `RELEASE` | `auracle` | Helm release name. |
+| `NAMESPACE` | `auracle` | Kubernetes namespace (created if missing). |
+| `DISCORD_SECRET` / `DISCORD_KEY` | `auracle-discord` / `token` | Secret holding the bot token, and its key. |
+| `DOCS_PATH` | `~/llms/auracle` | Directory on the node the bot reads the docs from. Empty uses a PersistentVolumeClaim instead. |
+| `OLLAMA_URL`, `OLLAMA_MODEL` | chart defaults | Ollama settings. |
+| `VALUES` | none | A Helm values file for any other settings. |
+
+Other targets: `make test`, `make build` (binaries in `bin/`), `make image` (local image only), `make push`, `make lint`, and `make helm-template` (print the manifests without applying them). `make helm` needs `docker` (with `buildx`), `kubectl` and `helm` installed.
+
+See the [chart README](charts/auracle/README.md) for loading the docs and all chart settings.
 
 ## Running in the devcontainer
 

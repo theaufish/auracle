@@ -42,6 +42,20 @@ kubectl logs deploy/auracle
 
 ## 4. Load the docs
 
+### From a directory on the node
+
+Set `docs.hostPath.path` to an absolute path on the node (Helm does not expand `~`). The chart creates a `hostPath` PersistentVolume for it and a claim bound to that volume, and you add or edit files in the directory directly:
+
+```sh
+helm upgrade --install auracle ./charts/auracle \
+  --set discord.existingSecret=auracle-discord \
+  --set docs.hostPath.path=$HOME/llms/auracle
+```
+
+`make helm` does this with `~/llms/auracle` by default. The directory must already exist, and on a multi-node cluster it must be on the node the bot runs on (use `nodeSelector`). The volume's reclaim policy is `Retain`, so uninstalling never touches the files.
+
+### In a PersistentVolumeClaim
+
 By default the chart creates a 1Gi PersistentVolumeClaim named `<release>-auracle-docs` (just `auracle-docs` if the release is named `auracle`). The bot sees new files without restarting.
 
 Convert any PDFs to Markdown first with [`pdf2md`](../../README.md#converting-pdfs-pdf2md), since the bot can't read PDFs.
@@ -93,7 +107,9 @@ To use docs you already have in a volume, set `docs.existingClaim` (and `docs.su
 | `ollama.model` | `gpt-oss:120b` | Model name. Must support tool calling. |
 | `docs.existingClaim` | `""` | Use this existing PersistentVolumeClaim for the docs. |
 | `docs.subPath` | `""` | Folder within the volume to use as the docs directory. |
-| `docs.persistence.enabled` | `true` | Create a claim for the docs when `existingClaim` isn't set. |
+| `docs.hostPath.path` | `""` | Absolute path of a directory on the node to use as the docs store. Takes precedence over `persistence`. |
+| `docs.hostPath.size` | `1Gi` | Capacity recorded on the hostPath volume and claim. |
+| `docs.persistence.enabled` | `true` | Create a claim for the docs when neither `existingClaim` nor `hostPath.path` is set. |
 | `docs.persistence.storageClass` | `""` | StorageClass for the created claim. Empty uses the cluster default. |
 | `docs.persistence.accessModes` | `[ReadWriteOnce]` | Access modes for the created claim. |
 | `docs.persistence.size` | `1Gi` | Size of the created claim. |

@@ -1,0 +1,39 @@
+{{- if and .Values.docs.hostPath.path (not .Values.docs.existingClaim) }}
+{{- $claim := include "auracle.docsClaim" . }}
+# PersistentVolumes are cluster-scoped, so the name includes the namespace.
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: {{ printf "%s-%s" .Release.Namespace $claim | trunc 63 | trimSuffix "-" }}
+  labels:
+    {{- include "auracle.labels" . | nindent 4 }}
+spec:
+  capacity:
+    storage: {{ .Values.docs.hostPath.size }}
+  accessModes:
+    - ReadWriteOnce
+  # The files live on the node, so never delete them with the volume.
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: ""
+  claimRef:
+    namespace: {{ .Release.Namespace }}
+    name: {{ $claim }}
+  hostPath:
+    path: {{ .Values.docs.hostPath.path | quote }}
+    type: Directory
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ $claim }}
+  labels:
+    {{- include "auracle.labels" . | nindent 4 }}
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: ""
+  volumeName: {{ printf "%s-%s" .Release.Namespace $claim | trunc 63 | trimSuffix "-" }}
+  resources:
+    requests:
+      storage: {{ .Values.docs.hostPath.size }}
+{{- end }}

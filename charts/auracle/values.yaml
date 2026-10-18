@@ -26,6 +26,12 @@ docs:
   existingClaim: ""
   # Optional path within the volume to use as the docs directory.
   subPath: ""
+  # Use a directory on the node as the docs store, through a hostPath
+  # PersistentVolume. Takes precedence over persistence. Must be an absolute
+  # path that exists on the node; Helm does not expand ~.
+  hostPath:
+    path: ""
+    size: 1Gi
   # Otherwise, create a PersistentVolumeClaim for the docs.
   persistence:
     enabled: true
