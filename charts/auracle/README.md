@@ -58,6 +58,8 @@ helm upgrade --install auracle ./charts/auracle \
 
 By default the chart creates a 1Gi PersistentVolumeClaim named `<release>-auracle-docs` (just `auracle-docs` if the release is named `auracle`). The bot sees new files without restarting.
 
+The bot ignores files and folders whose names start with `.` or `_`, so you can keep drafts or an archive next to the docs (e.g. `_archive/`).
+
 Convert any PDFs to Markdown first with [`pdf2md`](../../README.md#converting-pdfs-pdf2md), since the bot can't read PDFs.
 
 The bot's image has no shell, so copy files in with a temporary helper pod:

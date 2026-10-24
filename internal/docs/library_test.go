@@ -24,6 +24,10 @@ func newLibrary(t *testing.T) *Library {
 	write("lore/history.txt", "The kingdom fell in year 412.\n")
 	write("image.bin", "\x89PNG\x00\x00data")
 	write(".git/config", "dragons are secret")
+	write(".notes.md", "dragons are hidden")
+	write("lore/.draft.md", "dragons are drafts")
+	write("_archive/old.md", "dragons are archived")
+	write("lore/_wip.md", "dragons are unfinished")
 
 	l, err := Open(dir)
 	if err != nil {
@@ -66,7 +70,7 @@ func TestRead(t *testing.T) {
 	if got != "2: Dragons breathe fire.\n3: Goblins steal gold.\n" {
 		t.Errorf("Read = %q", got)
 	}
-	for _, p := range []string{"../etc/passwd", "/../../etc/passwd", "image.bin"} {
+	for _, p := range []string{"../etc/passwd", "/../../etc/passwd", "image.bin", ".git/config", ".notes.md", "lore/.draft.md", "/.notes.md", "_archive/old.md", "lore/_wip.md"} {
 		if _, err := l.Read(p, 0, 0); err == nil {
 			t.Errorf("Read(%q) succeeded, want error", p)
 		}

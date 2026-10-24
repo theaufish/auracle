@@ -120,18 +120,49 @@ Limits:
 - **Scanned PDFs need a text layer.** A PDF that is only page images has no text to extract, and its pages will be skipped as empty. Run it through OCR first.
 - **Complex layouts are approximate.** Table cells that wrap onto a second line, sidebars, and headings set in the same size as body text may come out imperfectly. The text is still all there and searchable.
 
+## Saving channel messages (`scribe`)
+
+`scribe` is a separate Discord bot that saves every message in one channel longer than a set number of characters as a Markdown file. On startup it reads the channel's whole history, oldest first, then keeps saving new messages as they arrive. Each file is named after the time the message was sent, in UTC, e.g. `2026-10-21T16-05-07Z.md`. A message sent in the same second as an earlier one gets a `-2`, `-3`, … suffix. Existing files are never overwritten.
+
+```sh
+DISCORD_TOKEN=... CHANNEL_ID=123456789012345678 OUT_DIR=~/llms/auracle/sessions \
+  go run ./cmd/scribe
+```
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `DISCORD_TOKEN` | required | Bot token. |
+| `CHANNEL_ID` | required | ID of the channel to read. Turn on Developer Mode in Discord, then right-click the channel → **Copy Channel ID**. |
+| `OUT_DIR` | required | Existing directory to write the files to. |
+| `MIN_CHARS` | `500` | Save only messages longer than this many characters. |
+| `LOG_LEVEL`, `LOG_FORMAT` | `info`, `text` | As for `auracle`. |
+
+Reading message text needs the privileged **Message Content Intent**: enable it on the bot's page in the Discord developer portal, or every message arrives empty and nothing is saved. The bot also needs the **View Channel** and **Read Message History** permissions in the channel.
+
+The file contains the message text as written in Discord. Pointing `OUT_DIR` inside `auracle`'s `DOCS_DIR` makes saved messages searchable by `auracle`. Files are written under a hidden temporary name first, so `auracle` never sees a half-written file.
+
+`scribe` records the IDs of the messages it has saved in a hidden `.scribe-saved` file in `OUT_DIR`, so restarting it never saves a message twice. Deleting a saved Markdown file doesn't bring it back on the next start; to re-save everything, delete `.scribe-saved` along with the files. Lowering `MIN_CHARS` and restarting saves older messages that now qualify.
+
+Edits, deletions, attachments and messages in threads are ignored. A message edited before `scribe` first reads it is saved as edited.
+
 ## Logging
 
 Logs are written to stderr. Each line about a message includes its `message_id`, `guild_id`, `channel_id`, `user` and `user_id`, so you can follow a single question from arrival to reply.
 
 | Level   | What's logged |
 |---------|---------------|
-| `info`  | Startup settings, Discord connect/resume, each question received (length only), each answer (time taken, number of tool calls, length), history resets, shutdown. |
+| `info`  | Startup settings, Discord connect/resume, each question received (length only), each answer (time taken, number of tool calls, time spent in tools, length), each reply delivered (total time since the question arrived), history resets, shutdown. |
 | `warn`  | Discord disconnects, tool calls that failed (e.g. the model asked for a file that doesn't exist), empty answers from the model. |
 | `error` | Model requests that failed or timed out, messages that couldn't be sent to Discord, startup errors. |
 | `debug` | Everything above, plus the text of each question and answer, and every tool call the model makes with its arguments and timing. |
 
 At `info` and above, what users typed and what the bot answered are not logged. Use `debug` to see them, for example while tuning prompts:
+
+Timings, rounded to the millisecond:
+
+- `duration` on `question answered`: time spent generating the answer, including tool calls.
+- `tool_time` on the same line: the part of that spent running tool calls. The rest was spent waiting on the model.
+- `total` on `reply sent` / `whispered reply sent`: from the question arriving to the reply being posted in Discord.
 
 ```sh
 LOG_LEVEL=debug DISCORD_TOKEN=... OLLAMA_MODEL=gpt-oss:120b DOCS_DIR=/path/to/your/docs go run ./cmd/auracle
@@ -192,9 +223,11 @@ Project layout:
 ```
 cmd/auracle/       bot entry point and configuration
 cmd/pdf2md/        PDF to per-page Markdown converter
+cmd/scribe/        bot that saves long channel messages as Markdown files
 internal/bot/      Discord handling, conversation history, built-in instructions
 internal/docs/     list/search/read tools over DOCS_DIR
 internal/ollama/   Ollama chat client and tool-call loop
 internal/pdfmd/    rebuilds columns, paragraphs, headings and tables from PDF text
+internal/scribe/   names and writes the files for scribe
 charts/auracle/    Helm chart
 ```

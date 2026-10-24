@@ -18,7 +18,7 @@ DISCORD_KEY    ?= token
 
 # Optional settings. When empty, the chart's values (or VALUES) are used.
 OLLAMA_URL   ?= http://host.docker.internal:11434
-OLLAMA_MODEL ?= gpt-oss:120b
+OLLAMA_MODEL ?= ornith-1.5:35b
 # Directory on the node holding the docs. Empty uses a PersistentVolumeClaim
 # instead (see the chart README).
 DOCS_PATH    ?= $(HOME)/llms/auracle

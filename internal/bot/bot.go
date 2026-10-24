@@ -164,12 +164,15 @@ func (b *Bot) onMessage(s *discordgo.Session, m *discordgo.MessageCreate) {
 	}
 
 	log.Info("question received", "dm", isDM, "chars", len(prompt))
+	start := time.Now()
 
 	// Handlers run on their own goroutine, so a slow model only blocks this message.
 	stopTyping := keepTyping(s, m.ChannelID)
 	answer := b.ask(log, m.ChannelID, m.Author.Username, prompt)
 	stopTyping()
-	b.reply(log, s, m.Message, answer)
+	if b.reply(log, s, m.Message, answer) {
+		log.Info("reply sent", "total", since(start))
+	}
 }
 
 func (b *Bot) onInteraction(s *discordgo.Session, i *discordgo.InteractionCreate) {
@@ -206,6 +209,7 @@ func (b *Bot) onWhisper(log *slog.Logger, s *discordgo.Session, i *discordgo.Int
 		question = strings.TrimSpace(opt.StringValue())
 	}
 	log.Info("whispered question received", "chars", len(question))
+	start := time.Now()
 
 	// Discord requires a response within 3 seconds, so acknowledge now; the
 	// user sees a private "thinking…" status until the answer is sent.
@@ -226,7 +230,9 @@ func (b *Bot) onWhisper(log *slog.Logger, s *discordgo.Session, i *discordgo.Int
 		log.Info("whisper history reset")
 		b.whisper(log, s, i.Interaction, "Your whispered conversation history has been cleared.")
 	default:
-		b.whisper(log, s, i.Interaction, b.ask(log, whisperKey(user.ID), user.Username, question))
+		if b.whisper(log, s, i.Interaction, b.ask(log, whisperKey(user.ID), user.Username, question)) {
+			log.Info("whispered reply sent", "total", since(start))
+		}
 	}
 }
 
@@ -241,16 +247,19 @@ func (b *Bot) ask(log *slog.Logger, key, username, prompt string) string {
 	tools := &loggedTools{ToolHandler: b.kb, log: log}
 	answer, err := b.llm.ChatWithTools(context.Background(), b.conversation(key, user), tools, maxToolRounds)
 	if err != nil {
-		log.Error("model request failed", "err", err, "duration", time.Since(start), "tool_calls", tools.calls)
+		log.Error("model request failed", "err", err, "duration", since(start), "tool_calls", tools.calls, "tool_time", tools.elapsed.Round(time.Millisecond))
 		return unclearReply()
 	}
 	answer = strings.TrimSpace(answer)
 	if answer == "" {
-		log.Warn("model returned an empty answer", "duration", time.Since(start), "tool_calls", tools.calls)
+		log.Warn("model returned an empty answer", "duration", since(start), "tool_calls", tools.calls, "tool_time", tools.elapsed.Round(time.Millisecond))
 		return unclearReply()
 	}
 
-	log.Info("question answered", "duration", time.Since(start), "tool_calls", tools.calls, "chars", len(answer))
+	// duration is the whole time spent generating the answer; tool_time is the
+	// part spent running tool calls, so the rest was spent in the model.
+	log.Info("question answered", "duration", since(start), "tool_calls", tools.calls,
+		"tool_time", tools.elapsed.Round(time.Millisecond), "chars", len(answer))
 	log.Debug("answer text", "text", answer)
 
 	b.remember(key, user, ollama.Message{Role: "assistant", Content: answer})
@@ -260,20 +269,23 @@ func (b *Bot) ask(log *slog.Logger, key, username, prompt string) string {
 // loggedTools wraps a ToolHandler to log each tool call the model makes.
 type loggedTools struct {
 	ollama.ToolHandler
-	log   *slog.Logger
-	calls int
+	log     *slog.Logger
+	calls   int
+	elapsed time.Duration // total time spent in tool calls
 }
 
 func (t *loggedTools) Call(name string, args json.RawMessage) string {
 	t.calls++
 	start := time.Now()
 	out := t.ToolHandler.Call(name, args)
+	took := time.Since(start)
+	t.elapsed += took
 	level := slog.LevelDebug
 	if strings.HasPrefix(out, "error:") {
 		level = slog.LevelWarn
 	}
 	t.log.Log(context.Background(), level, "tool call", "tool", name, "args", string(args),
-		"duration", time.Since(start), "result_chars", len(out))
+		"duration", took.Round(time.Millisecond), "result_chars", len(out))
 	return out
 }
 
@@ -305,8 +317,9 @@ func (b *Bot) resetHistory(channelID string) {
 	delete(b.history, channelID)
 }
 
-// reply sends text as a reply to m, splitting it to fit Discord's length limit.
-func (b *Bot) reply(log *slog.Logger, s *discordgo.Session, m *discordgo.Message, text string) {
+// reply sends text as a reply to m, splitting it to fit Discord's length
+// limit. It reports whether every part was sent.
+func (b *Bot) reply(log *slog.Logger, s *discordgo.Session, m *discordgo.Message, text string) bool {
 	for i, chunk := range split(text, maxDiscordMessage) {
 		var err error
 		if i == 0 {
@@ -316,14 +329,16 @@ func (b *Bot) reply(log *slog.Logger, s *discordgo.Session, m *discordgo.Message
 		}
 		if err != nil {
 			log.Error("failed to send discord message", "err", err)
-			return
+			return false
 		}
 	}
+	return true
 }
 
 // whisper sends text as a private reply to a deferred slash command,
-// splitting it to fit Discord's length limit.
-func (b *Bot) whisper(log *slog.Logger, s *discordgo.Session, i *discordgo.Interaction, text string) {
+// splitting it to fit Discord's length limit. It reports whether every part
+// was sent.
+func (b *Bot) whisper(log *slog.Logger, s *discordgo.Session, i *discordgo.Interaction, text string) bool {
 	for n, chunk := range split(text, maxDiscordMessage) {
 		var err error
 		if n == 0 {
@@ -338,10 +353,15 @@ func (b *Bot) whisper(log *slog.Logger, s *discordgo.Session, i *discordgo.Inter
 			// Interaction tokens expire after 15 minutes, which a very slow
 			// answer can exceed.
 			log.Error("failed to send whispered reply", "err", err)
-			return
+			return false
 		}
 	}
+	return true
 }
+
+// since returns the time elapsed since start, rounded to the millisecond for
+// readable logs.
+func since(start time.Time) time.Duration { return time.Since(start).Round(time.Millisecond) }
 
 // keepTyping shows the typing indicator in a channel until the returned func
 // is called. Discord clears the indicator after about 10 seconds, so it is

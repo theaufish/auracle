@@ -44,14 +44,14 @@ func Open(dir string) (*Library, error) {
 func (l *Library) Close() error { return l.root.Close() }
 
 // Files returns the slash-separated paths of every text file in the library,
-// skipping hidden files and directories.
+// skipping hidden files and directories (names starting with "." or "_").
 func (l *Library) Files() ([]string, error) {
 	var files []string
 	err := fs.WalkDir(l.fsys, ".", func(p string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
-		if p != "." && strings.HasPrefix(d.Name(), ".") {
+		if p != "." && isHidden(d.Name()) {
 			if d.IsDir() {
 				return fs.SkipDir
 			}
@@ -63,6 +63,27 @@ func (l *Library) Files() ([]string, error) {
 		return nil
 	})
 	return files, err
+}
+
+// isHidden reports whether a file or directory name is ignored: names
+// starting with "." or "_".
+func isHidden(name string) bool {
+	return strings.HasPrefix(name, ".") || strings.HasPrefix(name, "_")
+}
+
+// hasHiddenPart reports whether any element of the slash-separated path p is
+// hidden, so a hidden file can't be read by naming it, or one inside a hidden
+// directory.
+func hasHiddenPart(p string) bool {
+	if p == "." {
+		return false
+	}
+	for _, part := range strings.Split(p, "/") {
+		if isHidden(part) {
+			return true
+		}
+	}
+	return false
 }
 
 func (l *Library) isText(p string) bool {
@@ -122,7 +143,7 @@ func (l *Library) Search(query string) (string, error) {
 // numbered. end <= 0 means the end of the file.
 func (l *Library) Read(p string, start, end int) (string, error) {
 	p = path.Clean(strings.TrimPrefix(p, "/"))
-	if !fs.ValidPath(p) || !l.isText(p) {
+	if !fs.ValidPath(p) || hasHiddenPart(p) || !l.isText(p) {
 		return "", fmt.Errorf("%s is not a readable text file in the library", p)
 	}
 	f, err := l.fsys.Open(p)
